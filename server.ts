@@ -26,7 +26,6 @@ const getOpenAI = () => {
 // Gemini Initialization
 const getGenAI = () => {
   const apiKey = process.env.GEMINI_KEY_MANUAL || process.env.GEMINI_API_KEY;
-  // Rigorous validation to avoid using placeholders as actual keys
   if (!apiKey || 
       apiKey.trim() === '' || 
       apiKey === 'MY_GEMINI_API_KEY' || 
@@ -160,10 +159,6 @@ app.post('/api/visual-prompt', async (req, res) => {
     const genai = getGenAI();
     if (!genai) return res.status(400).json({ error: 'GEMINI_KEY_MANUAL_MISSING' });
 
-    const colorContext = config?.brandColors?.length ? `The following brand colors should predominate in the image (especially in the background and accents): ${config.brandColors.join(', ')}.` : '';
-    const logoContext = config?.brandLogoUrl ? `A placeholder for a brand logo or icon should be integrated naturally into the scene.` : '';
-    const brandNameContext = config?.brandName ? `The brand name "${config.brandName}" should be considered for any branding elements.` : '';
-
     // Step 1: Analyze original image if provided
     let visualDescription = productData.traits.join(', ');
     if (image) {
@@ -173,62 +168,83 @@ app.post('/api/visual-prompt', async (req, res) => {
           contents: [{ 
             role: 'user', 
             parts: [
-              { text: "Describe the physical product in this image in extreme detail (shape, texture, colors, unique features, labels) so a graphic designer can replicate it exactly." },
+              { text: "Describe the physical product in this image in EXTREME DETAIL. Include: exact shape, dimensions, colors, materials, textures, surface finish, labels, packaging, unique features, any text or branding visible on the product. Be VERY SPECIFIC so a designer can recreate it exactly." },
               { inlineData: { mimeType: 'image/jpeg', data: image.split(',')[1] } }
             ] 
           }]
         });
         visualDescription = visionResponse.text || visualDescription;
+        console.log('🎯 Visual Description Extracted (first 300 chars):', visualDescription.substring(0, 300));
       } catch (err) {
-        console.error("Vision Analysis Error:", err);
+        console.error("❌ Vision Analysis Error:", err);
       }
     }
 
-    // Step 2: Generate Ad Prompt
-    const userDirective = `Diseña un anuncio de PUBLICIDAD DE ÉLITE (Elite Advertising Poster).
-      LA IMAGEN DEBE TENER UN IMPACTO VISUAL MASIVO COMO LOS MEJORES ANUNCIOS DE REDES SOCIALES.
-      
-      ESTRUCTURA VISUAL OBLIGATORIA:
-      1. LAYOUT: De tipo "Product Poster". El producto (${productData.productName}) debe estar en el centro, perfectamente iluminado y con una perspectiva heroica.
-      2. TEXTO (RENDERIZADO EN ESPAÑOL):
-         - HEADLINE: "${generatedContent.hooks[0]}" (En la parte superior, tipografía gigante, bold y legible).
-         - SUBTITLE/BENEFIT: "${marketData.sentiment?.benefits?.[0]}" (Cerca del producto).
-         - PEQUEÑOS TEXTOS: Incluye "ENVÍO GRATIS", "PAGO CONTRA ENTREGA" o "${config?.brandName || 'PREMIUM'}" en esquinas o zonas estratégicas con iconos minimalistas.
-      3. ATMÓSFERA: Fondo de alto contraste, degradados elegantes o escenas lifestyle desenfocadas (bokeh).
-      4. RASGOS PRODUCTO: ${visualDescription}.
-      5. BRANDING: Usa los colores ${config?.brandColors?.join(', ') || 'profesionales y vibrantes'}.`;
+    // CRITICAL: Build ultra-detailed DALL-E 3 prompt
+    const dallE3Prompt = `You are an elite creative director. Generate a PROFESSIONAL advertising poster image.
 
-    const prompt = `Actúa como un Director Creativo Global para una marca de lujo. 
-      TU MISIÓN: Escribir un prompt en INGLÉS para el motor 'ChatGPT Images 2.0' que produzca una imagen publicitaria de nivel Google/Apple/Skynbiotic.
-      
-      CONTENIDO DEL PROMPT PARA EL MOTOR DE IMAGEN:
-      - Título en ESPAÑOL perfectamente escrito y renderizado: "${generatedContent.hooks[0]}".
-      - Composición maestra: El producto en el centro sobre una base elegante o flotando sutilmente.
-      - Iluminación: Cinematic, studio lights, Rembrandt lighting on the product.
-      - Textura y Material: Resalta la calidad de los materiales descritos (${visualDescription}).
-      - Elementos Gráficos: Añadir iconos elegantes para "Fast Shipping" y "Quality Guarantee" integrados en la composición.
-      - Tipografía: Moderna, Sans-Serif, bold, de fácil lectura.
-      
-      ${colorContext}
-      ${logoContext}
-      ${brandNameContext}
-      ${config?.globalDirectives ? `Restricciones específicas del cliente: ${config.globalDirectives}` : ''}
-      
-      Responde in JSON: { "prompt": "An extremely detailed ChatGPT Images 2.0 prompt in English that describes the final output as a full-color high-impact advertising poster with SPANISH text headlines, product-centric composition, and professional graphic design elements.", "format": "..." }`;
+PRODUCT SPECIFICATION:
+Product Name: ${productData.productName}
+Visual Details: ${visualDescription}
+Key Traits: ${productData.traits.join(', ')}
 
-    const response = await genai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      config: { responseMimeType: 'application/json' }
-    });
-    
-    const data = JSON.parse(response.text || '{}');
+ADVERTISING TEXT (MUST APPEAR IN IMAGE IN SPANISH):
+Headline: "${generatedContent.hooks[0]}"
+Benefit: "${marketData?.sentiment?.benefits?.[0] || 'Premium Quality & Best Price'}"
+Brand: "${config?.brandName || 'PREMIUM'}"
+
+DESIGN REQUIREMENTS (CRITICAL):
+1. PRODUCT PLACEMENT: The ${productData.productName} MUST be the DOMINANT element - centered, heroically lit, clearly visible and recognizable. The product should take up 40-50% of the image.
+
+2. TEXT RENDERING (CRITICAL FOR SUCCESS):
+   - Headline Text: "${generatedContent.hooks[0]}"
+   - Render in WHITE, BOLD, SANS-SERIF font (like Helvetica or Arial Bold)
+   - Font size: VERY LARGE (at least 15-20% of image height)
+   - Position: Top third of image, centered or left-aligned
+   - Background: Dark overlay or strong contrast to ensure text readability
+   - Text MUST be CRISP, CLEAR, and LEGIBLE even at small sizes
+   - CRITICAL: Do NOT blur or obscure this text - it must be primary focus after product
+
+3. BACKGROUND & ATMOSPHERE:
+   - Professional studio lighting on the product (Rembrandt or cinema lighting style)
+   - Background: Elegant gradient, blurred bokeh, or minimalist solid color that contrasts with product
+   - High contrast composition to make the product POP
+   - Professional, luxury advertising style (think Apple, Google, or premium brands)
+
+4. SUPPORTING ELEMENTS:
+   - Small text badges: "FREE SHIPPING", "TRUSTED", "${config?.brandName || 'QUALITY'}"
+   - Position in corners or bottom area, small but visible
+   - Minimalist icons for shipping and quality
+
+5. COLOR SCHEME:
+   - Primary: ${config?.brandColors?.[0] || 'Professional and vibrant colors'}
+   - Secondary: ${config?.brandColors?.[1] || 'Complementary colors for contrast'}
+   - Use these to accent the design while keeping focus on product and headline text
+
+6. OVERALL STYLE:
+   - High-end advertising poster
+   - Professional photography quality
+   - Magazine or premium campaign style
+   - Clean, modern, sophisticated
+
+CRITICAL INSTRUCTIONS:
+- The PRODUCT must be CLEARLY VISIBLE and RECOGNIZABLE as "${productData.productName}"
+- The HEADLINE TEXT in Spanish must be LARGE, BOLD, and EXTREMELY READABLE
+- Text contrast must be MAXIMUM - dark text on light or light text on dark
+- Do NOT make anything small or hard to read
+- This is a HIGH-IMPACT advertising poster for social media and print
+- Quality: Ultra-high definition, professional photography grade
+- Style: Vivid, high contrast, premium advertising aesthetic`;
+
+    console.log('📋 Generated DALL-E 3 Prompt Length:', dallE3Prompt.length);
+    console.log('📝 Prompt Preview (first 400 chars):', dallE3Prompt.substring(0, 400));
+
     res.json({ 
-      prompt: data.prompt || '', 
+      prompt: dallE3Prompt, 
       format: platform === 'Instagram' ? '1024x1024' : (platform === 'TikTok' ? '1024x1792' : '1024x1024')
     });
   } catch (error: any) {
-    console.error('Visual Error:', error);
+    console.error('❌ Visual Error:', error);
     let errorMessage = error.message;
     if (errorMessage.includes('API key not valid') || errorMessage.includes('API_KEY_INVALID')) {
       errorMessage = 'GEMINI_KEY_MANUAL_INVALID';
@@ -237,7 +253,7 @@ app.post('/api/visual-prompt', async (req, res) => {
   }
 });
 
-// Route to generate image with DALL-E if OpenAI key is present
+// Route to generate image with DALL-E 3
 app.post('/api/generate-image', async (req, res) => {
   const { prompt, size } = req.body;
   const openai = getOpenAI();
@@ -246,8 +262,10 @@ app.post('/api/generate-image', async (req, res) => {
   }
 
   try {
-    // Standard modern model identifier to ensure compatibility
-    // Using HD quality to match the "ChatGPT Images 2.0" requirement
+    console.log('🚀 Sending to DALL-E 3');
+    console.log('📊 Prompt length:', prompt.length);
+    console.log('📐 Size:', size || '1024x1024');
+    
     const response = await openai.images.generate({
       model: "dall-e-3", 
       prompt: prompt,
@@ -261,10 +279,10 @@ app.post('/api/generate-image', async (req, res) => {
       throw new Error("La API no devolvió ninguna imagen.");
     }
 
+    console.log('✅ Image generated successfully!');
     res.json({ url: response.data[0].url });
   } catch (error: any) {
-    console.error('OpenAI Error Details:', error);
-    // Return the specific error message to the client for better feedback
+    console.error('❌ OpenAI Error Details:', error);
     const errorMessage = error.response?.data?.error?.message || error.message || 'Error desconocido';
     res.status(500).json({ error: `Fallo en la generación: ${errorMessage}` });
   }
