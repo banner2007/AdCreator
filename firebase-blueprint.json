@@ -1,0 +1,46 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stores user credits and basic info",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "credits": { "type": "number" },
+        "subscriptionPlan": { "type": "string", "enum": ["free", "pro", "enterprise"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "credits"]
+    },
+    "Creative": {
+      "title": "Ad Creative",
+      "description": "Stores generated creative content",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "productName": { "type": "string" },
+        "visualTraits": { "type": "array" },
+        "marketData": { "type": "object" },
+        "hooks": { "type": "array" },
+        "copys": { "type": "array" },
+        "platform": { "type": "string" },
+        "tone": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "dalleImageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "productName", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile document"
+    },
+    "users/{userId}/creatives/{creativeId}": {
+      "schema": "Creative",
+      "description": "Historical creatives for a user"
+    }
+  }
+}
